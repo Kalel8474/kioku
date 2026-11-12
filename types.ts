@@ -31,6 +31,7 @@ export interface Item {
   values: Record<string, string>; // facet key -> text | data URL | linked item id
   mnemonic: string;
   facts: Fact[];
+  photos?: Record<string, string[]>; // extra photos per image facet key (the main one stays in values), e.g. a celebrity over the years
   created: number;
   updated: number;
 }
@@ -62,6 +63,7 @@ export interface Settings {
   scope: string; // legacy, unused
   study: StudyPlan;
   newToday: { date: string; count: number };
+  packs?: string[]; // card packs already added (so a card you delete is not added again)
 }
 
 export type Grade = 0 | 1 | 2 | 3; // again, hard, good, easy

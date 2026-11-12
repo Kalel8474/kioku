@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { Item, Settings, SrsState, Template } from './types';
 import seed from './seed.json';
 import { migrate } from './migrate';
+import { applyPacks } from './packs';
 
 export interface Data {
   ready: boolean;
@@ -75,10 +76,14 @@ export async function init() {
     templates = m.templates; items = m.items;
     if (m.changedT.length) await idbPut('templates', m.changedT);
     if (m.changedI.length) await idbPut('items', m.changedI);
-    set({ ready: true, templates, items, states, settings: { ...defaultSettings(), ...(kv.find((k) => k.id === 'settings') ?? {}) } });
+    let settings: Settings = { ...defaultSettings(), ...(kv.find((k) => k.id === 'settings') ?? {}) };
+    const pk = applyPacks(items, settings.packs ?? []);
+    if (pk.added.length) { items = pk.items; await idbPut('items', pk.added); }
+    if (pk.packs.length !== (settings.packs ?? []).length) { settings = { ...settings, packs: pk.packs }; await idbPut('kv', [settings]); }
+    set({ ready: true, templates, items, states, settings });
   } catch {
     const m = migrate(seed.templates as Template[], seed.items as Item[]);
-    set({ ready: true, persisted: false, templates: m.templates, items: m.items, states: [] });
+    set({ ready: true, persisted: false, templates: m.templates, items: applyPacks(m.items, []).items, states: [] });
   }
 }
 
@@ -161,6 +166,9 @@ export async function importJSON(text: string): Promise<string | null> {
   if (j?.app !== 'kioku' || !Array.isArray(j.items) || !Array.isArray(j.templates)) return 'That does not look like a Kioku backup.';
   const settings: Settings = { ...defaultSettings(), ...(j.settings ?? {}), id: 'settings' };
   const m = migrate(j.templates, j.items);
+  const pk = applyPacks(m.items, settings.packs ?? []);
+  settings.packs = pk.packs;
+  m.items = pk.items;
   set({ templates: m.templates, items: m.items, states: j.states ?? [], settings });
   await persist(async () => {
     for (const s of ['templates', 'items', 'states', 'kv'] as StoreName[]) await idbClear(s);

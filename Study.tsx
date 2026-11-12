@@ -5,7 +5,7 @@ import { previewGrade, schedule } from './srs';
 import { getData, saveSettings, saveStates, settingsToday, today, useData } from './store';
 import { PrefMap } from './PrefMap';
 import { MapMode, cueMapId, makeTap, mapOf, tapAnswer, viewFor, Tap } from './maps';
-import { FacetView, Facts, QuickFact, SlotView, speak, spokenText } from './ui';
+import { FacetView, Facts, QuickFact, SlotView, photoFor, photoSeed, speak, spokenText } from './ui';
 
 interface Cur { itemId: string; cue: Slot; targets: { state: SrsState; slot: Slot }[]; qs?: Choice[][]; taps?: (Tap | null)[] }
 const GRADES: [string, Grade][] = [['Again', 0], ['Hard', 1], ['Good', 2], ['Easy', 3]];
@@ -82,6 +82,7 @@ export function Study() {
       const all = pick.targets.map((tg, i) => (taps[i] ? [] : makeChoices(it, tg.slot, n, ww, rev)));
       if (all.every((c, i) => taps[i] || c.length >= 2)) qs = all; // too few look-alikes: fall back to recall + self-grade
     }
+    photoSeed.v = Math.floor(Math.random() * 1e9); // new card = new roll for which photo of each person is shown
     setCur({ itemId: pick.itemId, cue: pick.cue, targets: pick.targets, qs, taps: taps.some(Boolean) ? taps : undefined });
     setQi(0);
     setPicked(null);
@@ -158,9 +159,15 @@ export function Study() {
     const single = cur.targets.length === 1;
     const mm: MapMode = mapOf(plan);
     const cm = mm !== 'off' ? cueMapId(cur.cue, it) : null;
-    // a link cue (a person's prefecture) shows only the parts you have switched on: Silhouettes, Kanji, English. None switched on = show all.
-    const on = (r: string) => plan.roles[r] !== undefined;
-    const linkShow = on('Silhouettes') || on('Kanji') || on('English') ? { img: on('Silhouettes'), kanji: on('Kanji'), name: on('English') } : undefined;
+    // a link cue (a celebrity's prefecture) shows only the parts that are Primary (Silhouettes, Kanji, English); if none are, the parts not being
+    // tested as answers; if everything is an answer, just the shape. Never leaks an element you are asked to recall.
+    const rl = (r: string) => plan.roles[r];
+    const parts = ['Silhouettes', 'Kanji', 'English'] as const;
+    const pick = (f: (r: string) => boolean) => parts.map((r) => f(r));
+    let flags = pick((r) => rl(r) === 'primary');
+    if (!flags.some(Boolean)) flags = pick((r) => rl(r) !== 'secondary');
+    if (!flags.some(Boolean)) flags = [true, false, false];
+    const linkShow = { img: flags[0], kanji: flags[1], name: flags[2] };
     const cueBox = (
       <div className={`cue-box ${cm ? 'map' : ''}`}>
         {cm ? <PrefMap view={viewFor(mm as 'area' | 'all', cm)} mark={cm} /> : <SlotView it={it} slot={cur.cue} w={w} show={linkShow} />}
@@ -176,14 +183,24 @@ export function Study() {
         ))}
       </div>
     );
+    // celebrities linked to this card: names only (no photo, so you have to recall the face). Skipped when Faces is being tested as an answer.
+    const faceTested = cur.targets.some((t) => t.slot.type === 'reverse');
+    const linkedPeople = faceTested ? [] : (reverseIndex(w).get(it.id) ?? []);
     const recapBlock = (
       <>
-        {(others.length > 0 || it.mnemonic || it.facts.length > 0) && (
+        {(others.length > 0 || linkedPeople.length > 0 || it.mnemonic || it.facts.length > 0) && (
           <details className="recap">
             <summary>Rest of this card</summary>
             {others.map((f) => (
               <div key={f.key} className="recap-row"><span className="muted">{f.label}</span><SlotView it={it} slot={{ key: f.key, role: f.label, type: f.type, def: f }} w={w} size="small" /></div>
             ))}
+            {linkedPeople.length > 0 && (
+              <div className="recap-row"><span className="muted">Celebrities</span>
+                <div className="namelist">
+                  {linkedPeople.map((o) => { const kj = w.templates.get(o.templateId)?.facets.find((f) => f.type === 'kanji'); return <div key={o.id}>{titleOf(o, w)}{kj && o.values[kj.key] ? <span lang="ja" className="muted"> {o.values[kj.key]}</span> : null}</div>; })}
+                </div>
+              </div>
+            )}
             {it.mnemonic && <p className="mnemonic">💡 {it.mnemonic}</p>}
             <Facts it={it} limit={4} />
           </details>
@@ -365,9 +382,9 @@ function ChoiceBody({ c, w, named }: { c: Choice; w: World; named: boolean }) {
   const s = c.slot;
   if (s.type === 'reverse') {
     const o = w.items.get(s.of ?? '');
-    return <><img className="img cb" src={o?.values[s.def.key]} alt="" />{named && o && <div className="text small">{titleOf(o, w)}</div>}</>;
+    return <><img className="img cb" src={o ? photoFor(o, s.def.key, true) : undefined} alt="" />{named && o && <div className="text small">{titleOf(o, w)}</div>}</>;
   }
-  if (s.def.type === 'image') return <><img className="img cb" src={c.item.values[s.key]} alt="" />{named && <div className="text small">{titleOf(c.item, w)}</div>}</>;
+  if (s.def.type === 'image') return <><img className="img cb" src={photoFor(c.item, s.key, true)} alt="" />{named && <div className="text small">{titleOf(c.item, w)}</div>}</>;
   if (s.def.type === 'link') return <FacetView it={c.item} def={s.def} w={w} size="small" />;
   return <div className={`${s.def.type} cb`} lang={s.def.type === 'text' ? undefined : 'ja'}>{c.item.values[s.key]}</div>;
 }

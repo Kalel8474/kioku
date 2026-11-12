@@ -32,11 +32,24 @@ export async function fileToDataURL(file: File, max = 480): Promise<string> {
   return c.toDataURL('image/jpeg', 0.82);
 }
 
+/** Several photos per card: Study rotates through them. The pick is stable within one card (seed changes per card), different between cards. */
+export const photoSeed = { v: 0 };
+export function allPhotos(it: Item, key: string): string[] {
+  return [it.values[key], ...(it.photos?.[key] ?? [])].filter((x) => !!x && x.trim() !== '');
+}
+export function photoFor(it: Item, key: string, rotate = false): string {
+  const all = allPhotos(it, key);
+  if (!rotate || all.length < 2) return it.values[key];
+  let h = photoSeed.v;
+  for (const ch of `${it.id}|${key}`) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return all[h % all.length];
+}
+
 export interface LinkShow { img: boolean; kanji: boolean; name: boolean }
-export function FacetView({ it, def, w, size = 'big', show }: { it: Item; def: FacetDef; w: World; size?: 'big' | 'small'; show?: LinkShow }) {
+export function FacetView({ it, def, w, size = 'big', show, rotate }: { it: Item; def: FacetDef; w: World; size?: 'big' | 'small'; show?: LinkShow; rotate?: boolean }) {
   const v = it.values[def.key];
   if (!hasText(v)) return <div className="empty">—</div>;
-  if (def.type === 'image') return <img className={`img ${size}`} src={v} alt={def.label} />;
+  if (def.type === 'image') return <img className={`img ${size}`} src={photoFor(it, def.key, rotate)} alt={def.label} />;
   if (def.type === 'link') {
     const l = w.items.get(v);
     const lt = l && w.templates.get(l.templateId);
@@ -107,10 +120,10 @@ export function SlotView({ it, slot, w, size = 'big', show }: { it: Item; slot: 
     if (!o) return null;
     return (
       <div className="linkview big">
-        <img className={`img ${size}`} src={o.values[slot.def.key]} alt="" />
+        <img className={`img ${size}`} src={photoFor(o, slot.def.key, true)} alt="" />
         <div className="text small">{titleOf(o, w)}</div>
       </div>
     );
   }
-  return <FacetView it={it} def={slot.def} w={w} size={size} show={show} />;
+  return <FacetView it={it} def={slot.def} w={w} size={size} show={show} rotate />;
 }

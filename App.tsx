@@ -3,8 +3,9 @@ import { init, useData } from './store';
 import { Study } from './Study';
 import { Cards, Form, Editing } from './Cards';
 import { Settings } from './Settings';
+import { Lookup } from './Lookup';
 
-type Tab = 'study' | 'cards' | 'settings';
+type Tab = 'study' | 'lookup' | 'cards' | 'settings';
 
 export function App() {
   const d = useData();
@@ -22,6 +23,8 @@ export function App() {
           <Form editing={editing} done={(id) => { setEditing(null); if (id) { setTab('cards'); setOpenId(id); } }} />
         ) : tab === 'study' ? (
           <Study />
+        ) : tab === 'lookup' ? (
+          <Lookup />
         ) : tab === 'cards' ? (
           <Cards openId={openId} setOpenId={setOpenId} edit={setEditing} />
         ) : (
@@ -29,7 +32,7 @@ export function App() {
         )}
       </main>
       <nav>
-        {([['study', '🎴', 'Study'], ['cards', '🗂️', 'Cards'], ['settings', '⚙️', 'Settings']] as [Tab, string, string][]).map(([id, icon, label]) => (
+        {([['study', '🎴', 'Study'], ['lookup', '🔍', 'Look up'], ['cards', '🗂️', 'Cards'], ['settings', '⚙️', 'Settings']] as [Tab, string, string][]).map(([id, icon, label]) => (
           <button key={id} className={tab === id && !editing ? 'on' : ''} onClick={() => { setEditing(null); setTab(id); if (id === 'cards') setOpenId(null); }}>
             <span>{icon}</span>{label}
           </button>

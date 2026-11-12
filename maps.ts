@@ -21,8 +21,12 @@ export function viewFor(mode: 'area' | 'all', prefId: string): MapView {
   return { vb: r.vb, ids: r.ids, region: r.name, inset: rid === 'kyushu' };
 }
 
-/** The prefecture to colour in when this slot is a cue (the silhouette of a prefecture card). */
-export const cueMapId = (slot: Slot, it: Item): string | null => (slot.type === 'image' && MAP.prefs[it.id] ? it.id : null);
+/** The prefecture to colour in when this slot is a cue (a prefecture's silhouette, or a celebrity's home prefecture). */
+export function cueMapId(slot: Slot, it: Item): string | null {
+  if (slot.type === 'image' && MAP.prefs[it.id]) return it.id;
+  if (slot.type === 'link') { const v = it.values[slot.key]; return MAP.prefs[v] ? v : null; } // a celebrity's prefecture
+  return null;
+}
 
 /** The prefecture to tap when this slot is the answer: a prefecture's own silhouette, or a link to a prefecture. */
 export function tapAnswer(slot: Slot, it: Item): string | null {
