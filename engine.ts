@@ -60,6 +60,44 @@ export interface Slot {
   type: FacetType | 'reverse';
   def: FacetDef;
   of?: string; // reverse slot: the linking item
+  part?: 'given' | 'family'; // name slot: only this half of the name
+}
+
+// ---------- first / last names ----------
+export type NameMode = 'whole' | 'first' | 'last' | 'split';
+export const namesOf = (p: StudyPlan): NameMode => p.names ?? 'whole';
+const NAME_TEMPLATES = new Set(['t-person']);
+/**
+ * Splits a person's name into given and family parts. English is given-first, kanji and reading are family-first.
+ * Only clean "two words everywhere" names split; one-word and stage names (Orin, Kazu Laser, First Summer Uika) stay whole.
+ */
+export function splitName(it: Item, def: FacetDef, w: World): { given: string; family: string } | null {
+  const t = w.templates.get(it.templateId);
+  if (!t || !NAME_TEMPLATES.has(t.id) || !['text', 'kanji', 'reading'].includes(def.type)) return null;
+  const parts = (v?: string) => (v ?? '').trim().split(/\s+/).filter(Boolean);
+  const kj = t.facets.find((f) => f.type === 'kanji');
+  if (parts(it.values[t.titleKey]).length !== 2 || parts(kj ? it.values[kj.key] : '').length !== 2) return null;
+  const p = parts(it.values[def.key]);
+  if (p.length !== 2) return null;
+  if (def.type === 'text') return def.key === t.titleKey ? { given: p[0], family: p[1] } : null;
+  return { family: p[0], given: p[1] };
+}
+/** The text a slot holds for this card (a name slot gives just its half). */
+export function slotValue(it: Item, slot: Slot, w: World): string | undefined {
+  if (slot.part) return splitName(it, slot.def, w)?.[slot.part];
+  return it.values[slot.key];
+}
+/** The other half of the name for each name slot being asked, shown as a free hint in the question. */
+export function nameHint(it: Item, targets: Slot[], w: World, p: StudyPlan): string[] {
+  const m = namesOf(p);
+  if (p.hint === false || (m !== 'first' && m !== 'last')) return [];
+  const out: string[] = [];
+  for (const s of targets) {
+    const sp = s.part ? splitName(it, s.def, w) : null;
+    const v = sp?.[s.part === 'family' ? 'given' : 'family'];
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out;
 }
 
 export type ReverseIndex = Map<string, Item[]>;
@@ -74,10 +112,15 @@ export function reverseIndex(w: World): ReverseIndex {
   return idx;
 }
 
-export function slotsOf(it: Item, w: World, rev: ReverseIndex): Slot[] {
+export function slotsOf(it: Item, w: World, rev: ReverseIndex, names: NameMode = 'whole'): Slot[] {
   const t = w.templates.get(it.templateId);
   if (!t) return [];
-  const own: Slot[] = filledFacets(it, w).map((f) => ({ key: f.key, role: roleOf(t, f), type: f.type, def: f }));
+  const own: Slot[] = filledFacets(it, w).flatMap((f): Slot[] => {
+    const base: Slot = { key: f.key, role: roleOf(t, f), type: f.type, def: f };
+    if (names === 'whole' || !splitName(it, f, w)) return [base];
+    const parts: ('given' | 'family')[] = names === 'first' ? ['given'] : names === 'last' ? ['family'] : ['given', 'family'];
+    return parts.map((p) => ({ ...base, key: `${f.key}#${p}`, part: p }));
+  });
   const back: Slot[] = [];
   for (const o of rev.get(it.id) ?? []) {
     const ot = w.templates.get(o.templateId);
@@ -162,7 +205,7 @@ function analyze(c: Ctx) {
   const sm = new Map(c.states.map((s) => [s.id, s]));
   const info = new Map<string, Info>();
   for (const it of c.items) {
-    const slots = slotsOf(it, w, rev);
+    const slots = slotsOf(it, w, rev, namesOf(c.settings.study));
     const tslots = slots.filter((s) => plan.targets.has(s.role) && cueOptions(it, s, slots, plan, w).length > 0);
     if (tslots.length) info.set(it.id, { it, slots, tslots });
   }
@@ -270,7 +313,7 @@ export interface Choice {
  */
 export function makeChoices(it: Item, target: Slot, n: number, w: World, rev: ReverseIndex, rnd: () => number = Math.random): Choice[] {
   const gval = (x?: Item) => { const k = x && w.templates.get(x.templateId)?.facets.find((f) => f.type === 'group')?.key; return k ? x!.values[k] : undefined; };
-  const rightVal = target.type === 'reverse' ? w.items.get(target.of!)?.values[target.def.key] : it.values[target.key];
+  const rightVal = target.type === 'reverse' ? w.items.get(target.of!)?.values[target.def.key] : slotValue(it, target, w);
   const seen = new Set([rightVal]);
   const same: Choice[] = [], other: Choice[] = []; // same = shares the group value (e.g. same sex) with the right answer
   if (target.type === 'reverse') {
@@ -286,7 +329,7 @@ export function makeChoices(it: Item, target: Slot, n: number, w: World, rev: Re
   } else {
     const want = target.type === 'link' ? undefined : gval(it);
     for (const o of w.items.values()) {
-      const v = o.values[target.key];
+      const v = slotValue(o, target, w);
       if (o.id === it.id || o.templateId !== it.templateId || !hasText(v) || seen.has(v)) continue;
       if (target.type === 'link' && !w.items.has(v)) continue;
       seen.add(v);

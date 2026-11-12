@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import type { Grade, SrsState, StudyPlan } from './types';
-import { Choice, Slot, World, allRoles, choicesOf, defOf, filledFacets, makeChoices, makePlan, pickNext, pickPractice, planStats, reverseIndex, roleOf, titleOf, world } from './engine';
+import { Choice, NameMode, namesOf, nameHint, slotValue, Slot, World, allRoles, choicesOf, defOf, filledFacets, makeChoices, makePlan, pickNext, pickPractice, planStats, reverseIndex, roleOf, titleOf, world } from './engine';
 import { previewGrade, schedule } from './srs';
 import { getData, saveSettings, saveStates, settingsToday, today, useData } from './store';
 import { PrefMap } from './PrefMap';
@@ -96,7 +96,7 @@ export function Study() {
     if (settings.autoSpeak && cur) {
       const it = w.items.get(cur.itemId)!;
       const first = cur.targets.find((t) => t.slot.type === 'kanji' || t.slot.type === 'reading');
-      if (first) speak(first.slot.type === 'reading' ? it.values[first.slot.key] : spokenText(it, w));
+      if (first) speak(first.slot.part ? slotValue(it, first.slot, w) ?? '' : first.slot.type === 'reading' ? it.values[first.slot.key] : spokenText(it, w));
     }
   }
 
@@ -168,9 +168,11 @@ export function Study() {
     if (!flags.some(Boolean)) flags = pick((r) => rl(r) !== 'secondary');
     if (!flags.some(Boolean)) flags = [true, false, false];
     const linkShow = { img: flags[0], kanji: flags[1], name: flags[2] };
+    const hint = nameHint(it, cur.targets.map((t) => t.slot), w, plan);
     const cueBox = (
       <div className={`cue-box ${cm ? 'map' : ''}`}>
         {cm ? <PrefMap view={viewFor(mm as 'area' | 'all', cm)} mark={cm} /> : <SlotView it={it} slot={cur.cue} w={w} show={linkShow} />}
+        {hint.length > 0 && <div className="name-hint"><span className="muted">Hint</span> {hint.join(' · ')}</div>}
       </div>
     );
     const roleCounts = cur.targets.reduce((m, t) => m.set(t.slot.role, (m.get(t.slot.role) ?? 0) + 1), new Map<string, number>());
@@ -332,6 +334,20 @@ export function Study() {
             <button className={!plan.random ? 'on primary' : ''} onClick={() => saveSettings({ study: { ...plan, random: false } })}>Card order</button>
           </div>
         </div>
+        <div className="role-row"><span>Names</span>
+          <div className="seg">
+            {([['whole', 'Whole'], ['first', 'First'], ['last', 'Last'], ['split', 'Split']] as [NameMode, string][]).map(([v, l]) => (
+              <button key={v} className={namesOf(plan) === v ? 'on primary' : ''} onClick={() => saveSettings({ study: { ...plan, names: v } })}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className="role-row"><span>Hint</span>
+          <div className="seg">
+            {([[true, 'On'], [false, 'Off']] as [boolean, string][]).map(([v, l]) => (
+              <button key={l} className={(plan.hint !== false) === v ? 'on primary' : ''} onClick={() => saveSettings({ study: { ...plan, hint: v } })}>{l}</button>
+            ))}
+          </div>
+        </div>
         <div className="role-row"><span>Map</span>
           <div className="seg">
             {([['off', 'Off'], ['area', 'Area'], ['all', 'All']] as [MapMode, string][]).map(([v, l]) => (
@@ -346,6 +362,7 @@ export function Study() {
             ))}
           </div>
         </div>
+        <p className="muted">Names: Whole = full name. First or Last = only that half of a celebrity's name is shown or asked (Hint shows the other half in the question). Split = both halves, each rated separately. One-word and stage names stay whole.</p>
         <p className="muted">Map: shows a prefecture on a map of its area (Kansai…) or all Japan, and prefecture answers become "tap it on the map". Off: bare silhouette.</p>
         <p className="muted">Choices: pick the right answer from 2 or 4 options. Off: recall it yourself, then grade yourself.</p>
         {!ready && <div className="notice bad">Pick at least one Primary (shown) and one Secondary (recall).</div>}
@@ -386,5 +403,5 @@ function ChoiceBody({ c, w, named }: { c: Choice; w: World; named: boolean }) {
   }
   if (s.def.type === 'image') return <><img className="img cb" src={photoFor(c.item, s.key, true)} alt="" />{named && <div className="text small">{titleOf(c.item, w)}</div>}</>;
   if (s.def.type === 'link') return <FacetView it={c.item} def={s.def} w={w} size="small" />;
-  return <div className={`${s.def.type} cb`} lang={s.def.type === 'text' ? undefined : 'ja'}>{c.item.values[s.key]}</div>;
+  return <div className={`${s.def.type} cb`} lang={s.def.type === 'text' ? undefined : 'ja'}>{slotValue(c.item, s, w)}</div>;
 }

@@ -73,5 +73,7 @@ export interface StudyPlan {
   roles: Record<string, 'primary' | 'secondary'>;
   random: boolean;
   map?: 'off' | 'area' | 'all'; // prefecture silhouettes: show them on a map (area/all) and answer by tapping; off = bare silhouette
+  names?: 'whole' | 'first' | 'last' | 'split'; // person names: whole, only first/last name, or both halves as two separate answers
+  hint?: boolean; // when quizzing one half of a name, show the other half in the question (default on)
   choices?: number; // multiple choice: 0 = off (self-grade), 2 or 4 options. Missing = 2.
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FacetDef, Item } from './types';
-import { Slot, World, hasText, titleOf } from './engine';
+import { Slot, World, hasText, splitName, titleOf } from './engine';
 import { saveItem, today } from './store';
 
 export function speak(text: string) {
@@ -46,8 +46,8 @@ export function photoFor(it: Item, key: string, rotate = false): string {
 }
 
 export interface LinkShow { img: boolean; kanji: boolean; name: boolean }
-export function FacetView({ it, def, w, size = 'big', show, rotate }: { it: Item; def: FacetDef; w: World; size?: 'big' | 'small'; show?: LinkShow; rotate?: boolean }) {
-  const v = it.values[def.key];
+export function FacetView({ it, def, w, size = 'big', show, rotate, part }: { it: Item; def: FacetDef; w: World; size?: 'big' | 'small'; show?: LinkShow; rotate?: boolean; part?: 'given' | 'family' }) {
+  const v = (part ? splitName(it, def, w)?.[part] : undefined) ?? it.values[def.key];
   if (!hasText(v)) return <div className="empty">—</div>;
   if (def.type === 'image') return <img className={`img ${size}`} src={photoFor(it, def.key, rotate)} alt={def.label} />;
   if (def.type === 'link') {
@@ -69,7 +69,7 @@ export function FacetView({ it, def, w, size = 'big', show, rotate }: { it: Item
     <div className="facet-text">
       <div className={`${def.type} ${size}`} lang={def.type === 'text' ? undefined : 'ja'}>{v}</div>
       {say && (
-        <button className="icon" aria-label="Play audio" onClick={() => speak(def.type === 'reading' ? v : spokenText(it, w) || v)}>🔊</button>
+        <button className="icon" aria-label="Play audio" onClick={() => speak(def.type === 'reading' || part ? v : spokenText(it, w) || v)}>🔊</button>
       )}
     </div>
   );
@@ -125,5 +125,5 @@ export function SlotView({ it, slot, w, size = 'big', show }: { it: Item; slot: 
       </div>
     );
   }
-  return <FacetView it={it} def={slot.def} w={w} size={size} show={show} rotate />;
+  return <FacetView it={it} def={slot.def} w={w} size={size} show={show} rotate part={slot.part} />;
 }
