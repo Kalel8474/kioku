@@ -162,3 +162,5 @@ ul.list li.on{background:#eef8e4}
 }
 .name-hint{margin-top:10px;font-size:18px;font-weight:600;text-align:center}
 .cue-box{flex-wrap:wrap}.name-hint{flex-basis:100%;width:100%}
+.tagbulk{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 8px}
+.tagbulk input{flex:1;min-width:130px}

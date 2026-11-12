@@ -78,7 +78,7 @@ export async function init() {
     if (m.changedI.length) await idbPut('items', m.changedI);
     let settings: Settings = { ...defaultSettings(), ...(kv.find((k) => k.id === 'settings') ?? {}) };
     const pk = applyPacks(items, settings.packs ?? []);
-    if (pk.added.length) { items = pk.items; await idbPut('items', pk.added); }
+    if (pk.changed.length) { items = pk.items; await idbPut('items', pk.changed); }
     if (pk.packs.length !== (settings.packs ?? []).length) { settings = { ...settings, packs: pk.packs }; await idbPut('kv', [settings]); }
     set({ ready: true, templates, items, states, settings });
   } catch {

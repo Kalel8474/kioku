@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { FacetDef, Item, Template } from './types';
-import { World, hasText, titleOf, world } from './engine';
+import { World, allTags, cleanTag, hasText, titleOf, world } from './engine';
 import { deleteItem, saveItem, useData } from './store';
 import { ConfirmButton, FacetView, Facts, QuickFact, allPhotos, fileToDataURL } from './ui';
 import { PrintCards } from './Print';
@@ -14,9 +14,13 @@ export function Cards({ openId, setOpenId, edit }: { openId: string | null; setO
   const [q, setQ] = useState('');
   const [tpl, setTpl] = useState('all');
   const [printing, setPrinting] = useState(false);
+  const [tag, setTag] = useState('');
+  const [newTag, setNewTag] = useState('');
+  const tags = allTags(d.items);
   const list = d.items.filter((i) => {
     if (tpl !== 'all' && i.templateId !== tpl) return false;
-    const hay = Object.values(i.values).filter((v) => !v.startsWith('data:')).join(' ').toLowerCase() + ' ' + i.facts.map((f) => f.text).join(' ').toLowerCase();
+    if (tag && !i.tags?.includes(tag)) return false;
+    const hay = Object.values(i.values).filter((v) => !v.startsWith('data:')).join(' ').toLowerCase() + ' ' + i.facts.map((f) => f.text).join(' ').toLowerCase() + ' ' + (i.tags ?? []).join(' ').toLowerCase();
     return hay.includes(q.toLowerCase());
   });
   if (printing) return <PrintCards back={() => setPrinting(false)} />;
@@ -30,7 +34,23 @@ export function Cards({ openId, setOpenId, edit }: { openId: string | null; setO
           <button key={id} className={`chip btn ${tpl === id ? 'on' : ''}`} onClick={() => setTpl(id)}>{name}</button>
         ))}
       </div>
+      {tags.length > 0 && (
+        <div className="chips">
+          {[['', 'Any tag'], ...tags.map(([t, n]) => [t, `${t} (${n})`])].map(([id, name]) => (
+            <button key={id} className={`chip btn ${tag === id ? 'on' : ''}`} onClick={() => setTag(id)}>{name}</button>
+          ))}
+        </div>
+      )}
       <p className="muted">{list.length} of {d.items.length} cards</p>
+      {list.length > 0 && list.length < d.items.length && (
+        <div className="tagbulk">
+          <span className="muted">Tag the {list.length} shown:</span>
+          <input list="tag-list" value={newTag} placeholder="e.g. Cream Quiz" onChange={(e) => setNewTag(e.target.value)} />
+          <datalist id="tag-list">{tags.map(([t]) => <option key={t} value={t} />)}</datalist>
+          <button className="small primary" disabled={!cleanTag(newTag)} onClick={() => { const t = cleanTag(newTag); list.forEach((i) => !i.tags?.includes(t) && saveItem({ ...i, tags: [...(i.tags ?? []), t] })); setNewTag(''); }}>Add</button>
+          {tag && <button className="small" onClick={() => { list.forEach((i) => saveItem({ ...i, tags: (i.tags ?? []).filter((x) => x !== tag) })); setTag(''); }}>Remove “{tag}” from these</button>}
+        </div>
+      )}
       <ul className="list">
         {list.map((i) => {
           const t = w.templates.get(i.templateId);
@@ -79,6 +99,7 @@ function Detail({ it, w, back, open, edit }: { it: Item; w: World; back: () => v
           </ul>
         </section>
       )}
+      <TagBox it={it} />
       <section>
         <h2>Your memory hook</h2>
         <textarea rows={2} value={mn} placeholder="A story or image that makes this stick…" onChange={(e) => setMn(e.target.value)} onBlur={() => mn !== it.mnemonic && saveItem({ ...it, mnemonic: mn })} />
@@ -90,6 +111,28 @@ function Detail({ it, w, back, open, edit }: { it: Item; w: World; back: () => v
       </section>
       <ConfirmButton label="Delete this card" onConfirm={() => { deleteItem(it.id); back(); }} />
     </div>
+  );
+}
+
+/** Tags on one card: chips to remove, a box to add (suggests tags already in use). */
+function TagBox({ it }: { it: Item }) {
+  const d = useData();
+  const [v, setV] = useState('');
+  const mine = it.tags ?? [];
+  const add = () => { const t = cleanTag(v); if (t && !mine.includes(t)) saveItem({ ...it, tags: [...mine, t] }); setV(''); };
+  return (
+    <section>
+      <h2>Tags</h2>
+      <div className="chips">
+        {mine.map((t) => <button key={t} className="chip btn on" onClick={() => saveItem({ ...it, tags: mine.filter((x) => x !== t) })} aria-label={`Remove tag ${t}`}>{t} ✕</button>)}
+        {mine.length === 0 && <span className="muted">No tags yet.</span>}
+      </div>
+      <div className="row-gap">
+        <input list="tag-list2" value={v} placeholder="Add a tag, e.g. Itte Q" onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+        <datalist id="tag-list2">{allTags(d.items).map(([t]) => <option key={t} value={t} />)}</datalist>
+        <button className="small primary" disabled={!cleanTag(v)} onClick={add}>Add</button>
+      </div>
+    </section>
   );
 }
 
@@ -144,7 +187,7 @@ export function Form({ editing, done }: { editing: NonNullable<Editing>; done: (
     const id = existing?.id ?? `item-${now}`;
     const facts = [...(existing?.facts ?? [])];
     if (hasText(fact)) facts.push({ id: `f${now}`, text: fact.trim(), date: new Date().toISOString().slice(0, 10) });
-    saveItem({ id, templateId: t.id, values, mnemonic: mn, facts, photos: existing?.photos, created: existing?.created ?? now, updated: now });
+    saveItem({ id, templateId: t.id, values, mnemonic: mn, facts, photos: existing?.photos, tags: existing?.tags, created: existing?.created ?? now, updated: now });
     done(id);
   }
 

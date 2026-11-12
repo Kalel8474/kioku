@@ -198,13 +198,24 @@ export interface Test {
 }
 interface Info { it: Item; slots: Slot[]; tslots: Slot[] }
 
+/** Every tag in use with how many cards carry it, A-Z. */
+export function allTags(items: Item[]): [string, number][] {
+  const m = new Map<string, number>();
+  for (const it of items) for (const t of it.tags ?? []) m.set(t, (m.get(t) ?? 0) + 1);
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+export const cleanTag = (t: string) => t.trim().replace(/\s+/g, ' ');
+
 function analyze(c: Ctx) {
   const w = world(c.items, c.templates);
   const rev = reverseIndex(w);
   const plan = makePlan(c.settings.study);
   const sm = new Map(c.states.map((s) => [s.id, s]));
   const info = new Map<string, Info>();
+  const tag = c.settings.study.tag;
+  const onlyTag = tag && c.items.some((i) => i.tags?.includes(tag)) ? tag : ''; // a tag nobody has any more is ignored
   for (const it of c.items) {
+    if (onlyTag && !it.tags?.includes(onlyTag)) continue;
     const slots = slotsOf(it, w, rev, namesOf(c.settings.study));
     const tslots = slots.filter((s) => plan.targets.has(s.role) && cueOptions(it, s, slots, plan, w).length > 0);
     if (tslots.length) info.set(it.id, { it, slots, tslots });

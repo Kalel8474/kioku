@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Item } from './types';
-import { reverseIndex, titleOf, world, World } from './engine';
+import { allTags, reverseIndex, titleOf, world, World } from './engine';
 import { useData } from './store';
 import { allPhotos } from './ui';
 import { MAP } from './maps';
@@ -98,7 +98,9 @@ export function PrintCards({ back }: { back: () => void }) {
   const [printing, setPrinting] = useState(false);
   const [msg, setMsg] = useState('');
   const number = useMemo(() => { const m = new Map<string, number>(); const seen: Record<string, number> = {}; for (const it of d.items) { seen[it.templateId] = (seen[it.templateId] ?? 0) + 1; m.set(it.id, seen[it.templateId]); } return m; }, [d.items]);
-  const list = d.items.filter((i) => tpl === 'all' || i.templateId === tpl);
+  const [tag, setTag] = useState('');
+  const tags = allTags(d.items);
+  const list = d.items.filter((i) => (tpl === 'all' || i.templateId === tpl) && (!tag || i.tags?.includes(tag)));
   const chosen = sel.map((id) => w.items.get(id)).filter((x): x is Item => !!x);
   const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
@@ -136,6 +138,13 @@ export function PrintCards({ back }: { back: () => void }) {
           <button key={id} className={`chip btn ${tpl === id ? 'on' : ''}`} onClick={() => setTpl(id)}>{name}</button>
         ))}
       </div>
+      {tags.length > 0 && (
+        <div className="chips">
+          {[['', 'Any tag'], ...tags.map(([t, n]) => [t, `${t} (${n})`])].map(([id, name]) => (
+            <button key={id} className={`chip btn ${tag === id ? 'on' : ''}`} onClick={() => setTag(id)}>{name}</button>
+          ))}
+        </div>
+      )}
       <div className="row-gap">
         <button className="link" onClick={() => setSel((s) => [...new Set([...s, ...list.map((i) => i.id)])])}>Select all shown</button>
         <button className="link" onClick={() => setSel([])}>Clear</button>

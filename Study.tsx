@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import type { Grade, SrsState, StudyPlan } from './types';
-import { Choice, NameMode, namesOf, nameHint, slotValue, Slot, World, allRoles, choicesOf, defOf, filledFacets, makeChoices, makePlan, pickNext, pickPractice, planStats, reverseIndex, roleOf, titleOf, world } from './engine';
+import { Choice, NameMode, namesOf, nameHint, slotValue, Slot, World, allRoles, allTags, choicesOf, defOf, filledFacets, makeChoices, makePlan, pickNext, pickPractice, planStats, reverseIndex, roleOf, titleOf, world } from './engine';
 import { previewGrade, schedule } from './srs';
 import { getData, saveSettings, saveStates, settingsToday, today, useData } from './store';
 import { PrefMap } from './PrefMap';
@@ -328,6 +328,14 @@ export function Study() {
         {roles.map((r) => (
           <div key={r} className="role-row"><span>{r}</span>{seg(r)}</div>
         ))}
+        {allTags(d.items).length > 0 && (
+          <div className="role-row"><span>Group</span>
+            <select value={allTags(d.items).some(([t]) => t === plan.tag) ? plan.tag : ''} onChange={(e) => saveSettings({ study: { ...plan, tag: e.target.value } })}>
+              <option value="">All cards</option>
+              {allTags(d.items).map(([t, n]) => <option key={t} value={t}>{t} ({n})</option>)}
+            </select>
+          </div>
+        )}
         <div className="role-row"><span>Order</span>
           <div className="seg">
             <button className={plan.random ? 'on primary' : ''} onClick={() => saveSettings({ study: { ...plan, random: true } })}>Random</button>
