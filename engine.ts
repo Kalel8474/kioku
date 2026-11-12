@@ -224,6 +224,16 @@ export function planStats(c: Ctx) {
   return { due, started, total: info.size };
 }
 
+/** A prefecture with many celebrities (Tokyo) asks for at most this many faces per test; the rest stay due and come up in the next test. */
+export const MAX_FACES = 4;
+function capFaces<T extends { state: SrsState; slot: Slot }>(ts: T[], isNew: (s: SrsState) => boolean, rnd: () => number): T[] {
+  const rv = ts.filter((t) => t.slot.type === 'reverse');
+  if (rv.length <= MAX_FACES) return ts;
+  // already-started faces first (most overdue, i.e. missed ones, before others), then brand-new ones; random among equals
+  const keep = new Set(shuffle(rv, rnd).sort((a, b) => Number(isNew(a.state)) - Number(isNew(b.state)) || a.state.due - b.state.due).slice(0, MAX_FACES));
+  return ts.filter((t) => t.slot.type !== 'reverse' || keep.has(t));
+}
+
 export function pickNext(c: Ctx, rnd: () => number = Math.random): Test | null {
   const { w, plan, sm, info } = analyze(c);
 
@@ -233,8 +243,8 @@ export function pickNext(c: Ctx, rnd: () => number = Math.random): Test | null {
     const opts = cueOptions(x.it, slotOf(sts[0]), x.slots, plan, w);
     if (!opts.length) return null;
     const cue = weightedCue(opts, sts[0], rnd);
-    const targets = sts.filter((s) => cueOptions(x.it, slotOf(s), x.slots, plan, w).some((o) => o.key === cue.key)).map((s) => ({ state: s, slot: slotOf(s) }));
-    return { itemId: id, cue, targets, created };
+    const targets = capFaces(sts.filter((s) => cueOptions(x.it, slotOf(s), x.slots, plan, w).some((o) => o.key === cue.key)).map((s) => ({ state: s, slot: slotOf(s) })), (s) => !sm.has(s.id), rnd);
+    return { itemId: id, cue, targets, created: created.filter((cs) => targets.some((t) => t.state.id === cs.id)) };
   };
   const firstNotLast = (ids: string[]) => ids.find((i) => i !== c.lastItemId) ?? ids[0];
   const statesBy = (pred: (s: SrsState) => boolean) => {
@@ -282,16 +292,17 @@ export function pickNext(c: Ctx, rnd: () => number = Math.random): Test | null {
  */
 export function pickPractice(c: Ctx, done: Set<string>, rnd: () => number = Math.random): Test | null {
   const { w, plan, sm, info } = analyze(c);
-  const pool = [...info.values()].filter((x) => !done.has(x.it.id));
+  const pool = [...info.values()].filter((x) => x.tslots.some((t) => !done.has(`${x.it.id}|${t.key}`)));
   const ids = plan.random ? shuffle(pool.map((x) => x.it.id), rnd) : orderedFor(pool.map((x) => x.it), c.templates).map((i) => i.id);
   for (const id of ids) {
     const x = info.get(id)!;
-    const sts = x.tslots.map((t) => sm.get(`${id}|${t.key}`) ?? newState(id, t.key, c.now));
+    const sts = x.tslots.map((t) => sm.get(`${id}|${t.key}`) ?? newState(id, t.key, c.now)).filter((s) => !done.has(s.id));
+    if (!sts.length) continue;
     const slotOf = (s: SrsState) => x.tslots.find((t) => t.key === s.target)!;
     const opts = cueOptions(x.it, slotOf(sts[0]), x.slots, plan, w);
     if (!opts.length) continue;
     const cue = weightedCue(opts, sts[0], rnd);
-    const targets = sts.filter((s) => cueOptions(x.it, slotOf(s), x.slots, plan, w).some((o) => o.key === cue.key)).map((s) => ({ state: s, slot: slotOf(s) }));
+    const targets = capFaces(sts.filter((s) => cueOptions(x.it, slotOf(s), x.slots, plan, w).some((o) => o.key === cue.key)).map((s) => ({ state: s, slot: slotOf(s) })), () => false, rnd);
     if (targets.length) return { itemId: id, cue, targets, created: [] };
   }
   return null;

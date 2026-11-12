@@ -67,7 +67,7 @@ export function Study() {
     const cx = { items: dd.items, templates: dd.templates, states: dd.states, settings: s, now: t, lastItemId: last.current };
     const pick = prac.current ? pickPractice(cx, practiced.current) : pickNext(cx);
     if (!pick) { setCur(null); setPhase('done'); return; }
-    if (prac.current) practiced.current.add(pick.itemId);
+    if (prac.current) pick.targets.forEach((t) => practiced.current.add(t.state.id)); // practice round: each answer once
     if (pick.created.length) {
       saveStates(pick.created);
       saveSettings({ newToday: { date: today(t), count: s.newToday.count + pick.created.length } });
