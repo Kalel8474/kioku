@@ -29,8 +29,9 @@ fs.writeFileSync('dist/app.css', css);
 fs.writeFileSync('dist/index.html', `${head('<meta name="kioku-sw" content="1"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon.svg">')}<link rel="stylesheet" href="app.css"></head><body>${body}<script src="app.js"></script></body></html>`);
 fs.writeFileSync('dist/manifest.webmanifest', JSON.stringify({ name: 'Kioku', short_name: 'Kioku', start_url: '.', display: 'standalone', background_color: '#f5f1e8', theme_color: '#f5f1e8', icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml' }] }));
 fs.writeFileSync('dist/icon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#4a8a35"/><text x="50" y="68" font-size="56" text-anchor="middle" fill="#fff" font-family="sans-serif">記</text></svg>`);
-fs.writeFileSync('dist/sw.js', `const C='kioku-v1',F=['./','index.html','app.js','app.css','manifest.webmanifest','icon.svg'];
+fs.writeFileSync('dist/sw.js', `// Network first: a new upload shows up on the next open; the cache is only the offline fallback.
+const C='kioku-${Date.now()}',F=['./','index.html','app.js','app.css','manifest.webmanifest','icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(F)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`);
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-cache'}).then(r=>{if(r.ok){const k=r.clone();caches.open(C).then(c=>c.put(e.request,k));}return r;}).catch(()=>caches.match(e.request).then(r=>r||caches.match('index.html'))));});`);
 console.log('built', Object.fromEntries(fs.readdirSync('dist').map((f) => [f, fs.statSync('dist/' + f).size])));
